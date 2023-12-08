@@ -1,24 +1,26 @@
 import {
   checkIfRouteExists,
-  getRouteByKeyAndParentId,
+  getRoutes,
   getRoutesByParent,
   insertRoute,
   removeRouteQuery,
 } from '@/main/db/route/routeQueries';
 import { Route, RouteFuncs, RouteNode, RouteType } from '@/shared/models/route';
 import { GenFuncs } from '@/shared/utils/GenFuncs';
-import { BrowserWindow, Menu, app } from 'electron';
+import { BrowserWindow, Menu } from 'electron';
 
 import { Actions } from '@/main/actions';
 import { FileFuncs } from '@/main/helpers/fileFuncs';
-import { PathFuncs } from '@/shared/utils/MainFuncs';
+import { MainFuncs, PathFuncs } from '@/shared/utils/MainFuncs';
 import {
   createRouteFile,
   createRouterGroupFolder,
   writeRouterFile,
 } from '@/main/generate/endpoints';
+import { ProjectType } from '@/shared/models/project';
+import { writePyRouterFile } from '@/main/generate/fastapi/pyEndpointsGen';
 
-const checkForDuplicateRoute = async (
+const checkForDuplicateRouteGroup = async (
   curRoute: Route,
   newKey: string,
   newType: RouteType
@@ -32,7 +34,13 @@ const checkForDuplicateRoute = async (
     childRoutes.map((route: Route) => {
       if (
         route.key === newKey ||
-        curFuncName === RouteFuncs.getFuncNameFromStr(newKey, newType, 0)
+        curFuncName ===
+          RouteFuncs.getFuncNameFromStr(
+            RouteFuncs.getPath(curRoute),
+            newKey,
+            newType,
+            0
+          )
       ) {
         return true;
       }
@@ -41,13 +49,35 @@ const checkForDuplicateRoute = async (
   }
 };
 
+const checkForDuplicateRoute = async (
+  curRoute: Route,
+  newRoute: Route,
+  routeKey: string,
+  method: string
+) => {
+  let routes = await getRoutes();
+
+  let newRoutePath = GenFuncs.getRoutePath(newRoute);
+
+  // TO CHANGE (INEFFICIENT)
+  let matchIndex = routes.findIndex(
+    (route: Route) =>
+      GenFuncs.getRoutePath(route) == newRoutePath &&
+      route.type == newRoute.type
+  );
+
+  return matchIndex != -1;
+};
+
 export const createRouteGroup = async (
   event: Electron.IpcMainInvokeEvent,
   payload: any
 ) => {
-  let { projKey, curRoute, routeKey } = payload;
+  let { curRoute, routeKey } = payload;
 
-  let apiDir = `${PathFuncs.getProjectPath(projKey)}/src/api`;
+  const { projKey, projType } = MainFuncs.getCurProject();
+
+  let apiDir = PathFuncs.getApiDir(projKey);
 
   let newRoute: Route = {
     parentId: curRoute.id,
@@ -64,7 +94,7 @@ export const createRouteGroup = async (
     };
   }
 
-  let hasDuplicate = await checkForDuplicateRoute(
+  let hasDuplicate = await checkForDuplicateRouteGroup(
     curRoute,
     routeKey,
     RouteType.group
@@ -83,10 +113,16 @@ export const createRouteGroup = async (
 
   let parentDir = `${apiDir}${GenFuncs.getFilePath(curRoute)}`;
 
-  await writeRouterFile(curRoute.id, curRoute.key, parentDir);
+  await writeRouterFile(
+    curRoute.parentPath,
+    curRoute.id,
+    curRoute.key,
+    parentDir,
+    projType
+  );
 
-  // // 2. Create group folder
-  createRouterGroupFolder(parentDir, newRoute);
+  // 2. Create group folder
+  createRouterGroupFolder(parentDir, newRoute, projType);
   newRoute.id = lastId;
   return {
     error: null,
@@ -98,9 +134,9 @@ export const createEndpoint = async (
   event: Electron.IpcMainInvokeEvent,
   payload: any
 ) => {
-  let { projKey, routeKey, curRoute, method } = payload;
-
-  let apiDir = `${PathFuncs.getProjectPath(projKey)}/src/api`;
+  let { routeKey, curRoute, method } = payload;
+  let { projKey, projType } = MainFuncs.getCurProject();
+  let apiDir = PathFuncs.getApiDir(projKey);
 
   let newRoute: Route = {
     parentId: curRoute.id,
@@ -110,24 +146,7 @@ export const createEndpoint = async (
     type: method,
   };
 
-  // 1. Check if parent path and key exists
-  let route1 = await checkIfRouteExists(
-    GenFuncs.getRoutePath(curRoute),
-    routeKey,
-    method
-  );
-  let route2 = await checkIfRouteExists(
-    curRoute.parentPath,
-    curRoute.key,
-    method
-  );
-  let route3 = await checkIfRouteExists(
-    GenFuncs.getRoutePath(newRoute),
-    '',
-    method
-  );
-
-  if (route1 || route2 || route3) {
+  if (await checkForDuplicateRoute(curRoute, newRoute, routeKey, method)) {
     return { error: 'Route already exists' };
   }
 
@@ -138,10 +157,16 @@ export const createEndpoint = async (
 
   // 1. Create route folder
   let parentDir = `${apiDir}${GenFuncs.getFilePath(curRoute)}`;
-  await createRouteFile(parentDir, newRoute);
+  await createRouteFile(parentDir, newRoute, projType);
 
   // 2. Write router file
-  await writeRouterFile(curRoute.id, curRoute.key, parentDir);
+  await writeRouterFile(
+    curRoute.parentPath,
+    curRoute.id,
+    curRoute.key,
+    parentDir,
+    projType
+  );
 
   return {
     error: null,
@@ -164,32 +189,44 @@ export const deleteRoute = async (
   payload: any,
   window: BrowserWindow
 ) => {
-  const { route, parent, projKey } = payload;
+  const { route, parent } = payload;
+  const { projKey, projType } = MainFuncs.getCurProject();
+  let apiDir = PathFuncs.getApiDir(projKey);
 
   if (route.parentId != -1) {
     Menu.buildFromTemplate([
       {
         label: 'Delete route',
         click: async () => {
-          let apiDir = `${PathFuncs.getProjectPath(projKey)}/src/api`;
           let deleteIds: Array<number> = [];
+
           getNodeAndChildrenIds(route, deleteIds);
+          // return;
           for (let i = 0; i < deleteIds.length; i++) {
             await removeRouteQuery(deleteIds[i]);
           }
 
           // 2. delete folder / files
-          let routeFilePath = `${apiDir}${GenFuncs.getFilePath(route)}`;
+          let routeFilePath = `${apiDir}${GenFuncs.getFilePath(
+            route,
+            projType
+          )}`;
           if (route.type == RouteType.group) {
             await FileFuncs.deleteDir(routeFilePath);
           } else {
-            routeFilePath += '.ts';
+            routeFilePath += `.${MainFuncs.getExtension(projType)}`;
             await FileFuncs.deleteFile(routeFilePath);
           }
 
           // write router file of parent group
           let parentDir = `${apiDir}${GenFuncs.getFilePath(parent)}`;
-          await writeRouterFile(parent.id, parent.key, parentDir);
+          await writeRouterFile(
+            parent.parentPath,
+            parent.id,
+            parent.key,
+            parentDir,
+            projType
+          );
           window.webContents.send(Actions.UPDATE_ROUTE_DELETED, route);
         },
       },

@@ -1,4 +1,5 @@
 import { electronStoreKeys, nodeTypeKey } from '@/renderer/misc/constants';
+import { Editor } from '@/renderer/redux/app/appSlice';
 import { exec } from 'child_process';
 import { BrowserWindow } from 'electron';
 import Store from 'electron-store';
@@ -6,6 +7,7 @@ import Store from 'electron-store';
 export const setWindowSze = (p: any, mainWindow: BrowserWindow) => {
   // mainWindow?.setSize(payload.width, payload.height);
   let { width, height } = p;
+  if (process.platform == 'win32') width = width + 15;
   const bounds = mainWindow!.getBounds();
 
   // Calculate the difference between the new size and the old size
@@ -42,7 +44,7 @@ export const setOpenWithVs = async (
 ) => {
   let s = new Store();
   let { openWithVs } = p;
-  s.set(electronStoreKeys.openWithVsKey, openWithVs);
+  s.set(electronStoreKeys.editorToUseKey, openWithVs);
   return;
 };
 
@@ -74,4 +76,23 @@ export const checkVsRequirementsMet = async () => {
   return {
     codeReq: isCodeCliInstalled,
   };
+};
+
+export const getEditorToUse = (e: Electron.IpcMainInvokeEvent, p: any) => {
+  let s = new Store();
+
+  // console.log("Editor in use: ", s.get(electronStoreKeys.editorToUseKey));
+
+  return s.get(electronStoreKeys.editorToUseKey);
+}
+
+export const setEditorToUse = (
+  e: Electron.IpcMainInvokeEvent,
+  p: any,
+  mainWindow: any
+) => {
+  let s = new Store();
+  let { editorToUse } : {editorToUse: Editor} = p;
+  s.set(electronStoreKeys.editorToUseKey, editorToUse);
+  return;
 };

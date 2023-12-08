@@ -7,10 +7,16 @@ import {
   FirebaseActions,
   ModuleActions,
   MongoActions,
+  ProjectActions,
   ResendActions,
 } from './actions';
 
 export type Channels = 'ipc-example';
+
+const projectHandler = {
+  setCurProject: (payload: any) =>
+    ipcRenderer.invoke(ProjectActions.SET_CURRENT_PROJECT, payload),
+};
 
 const firebaseHandler = {
   checkFirebaseCredentials: (payload: any) =>
@@ -83,6 +89,8 @@ const editorHandler = {
     ipcRenderer.send(EditorActions.OPEN_FILE, payload),
   openProjectInVs: (payload: any) =>
     ipcRenderer.send(EditorActions.OPEN_PROJECT_IN_VS, payload),
+  openProjectInIntelliJ: (payload: any) =>
+    ipcRenderer.send(EditorActions.OPEN_PROJECT_IN_INTELLIJ, payload),
 };
 
 const electronHandler = {
@@ -124,15 +132,23 @@ const electronHandler = {
   checkVsRequirementsMet: () =>
     ipcRenderer.invoke(Actions.CHECK_VS_REQUIREMENTS_MET),
 
+  getEditorToUse: () => ipcRenderer.invoke(Actions.GET_EDITOR_TO_USE),
+  setEditorToUse: (payload: any) =>
+    ipcRenderer.invoke(Actions.SET_EDITOR_TO_USE, payload),
+
   ...firebaseHandler,
   ...moduleHandler,
   ...mongoHandler,
   ...envHandler,
   ...resendHandler,
   ...editorHandler,
+  ...projectHandler,
 
   createProject: (payload: any) =>
     ipcRenderer.invoke(Actions.CREATE_PROJECT, payload),
+
+  checkBinInstalled: (payload: any) =>
+    ipcRenderer.invoke(Actions.CHECK_BIN_INSTALLED, payload),
 
   openCheckoutPage: (payload: any) =>
     ipcRenderer.invoke(Actions.OPEN_CHECKOUT_PAGE, payload),

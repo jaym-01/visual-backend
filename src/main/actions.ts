@@ -1,6 +1,5 @@
 export class Actions {
   static SHORTCUT_DETECTED = 'shortcut-detected';
-
   static UPDATE_CHECK_RESULT = 'update-check-result';
 
   // WINDOW
@@ -17,6 +16,10 @@ export class Actions {
   static GET_OPEN_WITH_VS = 'get-open-with-vs';
   static SET_OPEN_WITH_VS = 'set-open-with-vs';
   static CHECK_VS_REQUIREMENTS_MET = 'check-vs-requirements-met';
+  static CHECK_BIN_INSTALLED = 'check-bin-installed';
+
+  static GET_EDITOR_TO_USE = 'get-editor-to-use';
+  static SET_EDITOR_TO_USE = 'set-editor-to-use';
 
   // PROJECT
   static CREATE_PROJECT = 'create-project';
@@ -70,6 +73,9 @@ export class Actions {
   static DELETE_AUTH_TOKENS = 'delete-auth-tokens';
 }
 
+export class ProjectActions {
+  static SET_CURRENT_PROJECT = 'set-current-project';
+}
 export class ModuleActions {
   static SHOW_MODULE_CONTEXT_MENU = 'show-context-context-menu';
   static UPDATE_MODULE_DELETE_CLICKED = 'update-module-delete-clicked';
@@ -98,5 +104,6 @@ export class ResendActions {
 
 export class EditorActions {
   static OPEN_PROJECT_IN_VS = 'open-project-in-vs';
+  static OPEN_PROJECT_IN_INTELLIJ = 'open-project-in-intellij';
   static OPEN_FILE = 'open-file';
 }

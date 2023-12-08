@@ -22,6 +22,14 @@ export enum AppPage {
   Project = 'project',
 }
 
+export enum Editor {
+  VISUALBACKEND = 'Visual Backend',
+  VSCODE = 'VS Code',
+  INTELLIJ = 'IntelliJ IDEA',
+  // WebStorm = 'WebStorm',
+  // PyCharm = 'PyCharm',
+}
+
 export type AppState = {
   currentProject: Project | null;
   projects: Array<Project>;
@@ -30,7 +38,7 @@ export type AppState = {
   curPlatform: Platform;
   curPage: AppPage;
   user: any;
-  openWithVs: boolean;
+  editorToUse: Editor;
 };
 
 const getInitialState = (): AppState => {
@@ -42,7 +50,7 @@ const getInitialState = (): AppState => {
     currentRoute: null,
     loggedIn: false,
     user: null,
-    openWithVs: false,
+    editorToUse: Editor.VISUALBACKEND,
   };
 };
 // create a slice
@@ -57,8 +65,8 @@ export const appSlice = createSlice({
     setPlatform(state, action) {
       state.curPlatform = action.payload;
     },
-    setOpenWithVs(state, action) {
-      state.openWithVs = action.payload;
+    setEditorToUse(state, action) {
+      state.editorToUse = action.payload;
     },
 
     setCurPage(state, action) {
@@ -93,7 +101,7 @@ export const {
   setUser,
   setCurPage,
   setPlatform,
-  setOpenWithVs,
+  setEditorToUse,
   setProjects,
   addProject,
   setLoggedIn,

@@ -7,19 +7,55 @@ import { getRoutes, insertRoute } from '../../db/route/routeQueries';
 import { getModuleFuncs, getModules } from '@/main/db/modules/moduleQueries';
 import { RouteType } from '@/shared/models/route';
 import { FileFuncs } from '@/main/helpers/fileFuncs';
-import { installPackages } from '@/main/generate/install';
+import { checkNodeVer, installPackages } from '@/main/generate/install';
 import { MainFuncs, PathFuncs } from '@/shared/utils/MainFuncs';
 
 import {
   generateCloudBuildYaml,
   writeCloudBuildYaml,
 } from '@/main/generate/cloudbuild';
+import { ProjectType } from '@/shared/models/project';
+import { createFastAPIProject } from './fastapi/pythonProjectFuncs';
+import Store from 'electron-store';
+import { curProjectKey } from '@/renderer/misc/constants';
+import {
+  checkPython3Ver,
+  freezePyPackages,
+} from '@/main/generate/fastapi/pythonInstall';
+
+export const checkBinInstalled = async (
+  e: Electron.IpcMainInvokeEvent,
+  payload: any
+) => {
+  let { projType } = payload;
+
+  if (projType == ProjectType.FastAPI) {
+    let { installed, error } = await checkPython3Ver();
+    console.log('Python installed:', installed);
+    if (!installed) {
+      return { error: 'python3 not found' };
+    } else {
+      return { error: null };
+    }
+  } else {
+    let { installed, error } = await checkNodeVer();
+    console.log('Node installed:', installed);
+    if (!installed) {
+      return { error: 'python3 not found' };
+    } else {
+      return { error: null };
+    }
+  }
+};
 
 export const createProject = async (
   event: Electron.IpcMainInvokeEvent,
   payload: any
 ) => {
-  const { projId, projAccessToken, projKey } = payload;
+  const { projKey, projectType } = payload;
+  if (projectType && projectType == ProjectType.FastAPI) {
+    return createFastAPIProject(payload);
+  }
 
   let projectDir = MainFuncs.getProjectPath(projKey);
 
@@ -60,6 +96,15 @@ export const createProject = async (
   return { error: null };
 };
 
+export const setCurProject = async (
+  event: Electron.IpcMainInvokeEvent,
+  payload: any
+) => {
+  let s = new Store();
+  s.set(curProjectKey, JSON.stringify(payload));
+  return true;
+};
+
 export const initProject = async (
   event: Electron.IpcMainInvokeEvent,
   payload: any
@@ -87,6 +132,16 @@ export const updateYamlAndGitPush = async (
   payload: any
 ) => {
   let { project } = payload;
+  let { projType } = MainFuncs.getCurProject();
+
+  // Freeze requirements
+  console.log('Freezing packages > requirements.txt');
+
+  if (projType == ProjectType.FastAPI) {
+    let success = await freezePyPackages(project.key);
+    if (!success) return false;
+  }
+
   try {
     let { data } = await ProjectService.getProjectSecretStatements(project._id);
     let setSecretsString = '';

@@ -16,12 +16,23 @@ async function startServer(
   });
 
   let finalPort = port ? port : '8080';
-  console.log('Port:', port);
 
   let npmPath = BinFuncs.getNpmPath();
-  g.serverProcess = spawn(npmPath, ['run', 'dev', finalPort, '--silent'], {
-    cwd: projPath,
-  });
+  let { projKey, projType } = MainFuncs.getCurProject();
+
+  if (projType == ProjectType.FastAPI) {
+    g.serverProcess = spawn(
+      BinFuncs.getEnvPyPath(projKey),
+      ['-m', 'uvicorn', 'src.main:app', '--port', finalPort],
+      {
+        cwd: projPath,
+      }
+    );
+  } else {
+    g.serverProcess = spawn(npmPath, ['run', 'dev', finalPort, '--silent'], {
+      cwd: projPath,
+    });
+  }
 
   g.serverProcess.on('spawn', () => {
     window.webContents.send(Actions.UPDATE_TERMINAL, {
@@ -61,10 +72,10 @@ async function startServer(
 
 import treeKill from 'tree-kill';
 import { BinFuncs, MainFuncs, PathFuncs } from '@/shared/utils/MainFuncs';
+import { ProjectType } from '@/shared/models/project';
 export async function stopServer(g: { serverProcess: ChildProcess | null }) {
   return new Promise(async (resolve, reject) => {
     if (g.serverProcess) {
-      console.log('Killing process with pid:', g.serverProcess.pid);
       treeKill(g.serverProcess.pid!, (err) => {});
 
       g.serverProcess.on('exit', () => {

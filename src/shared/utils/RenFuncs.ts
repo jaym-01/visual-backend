@@ -1,5 +1,6 @@
 import {
   AppPage,
+  Editor,
   Platform,
   setCurPage,
   setCurrentProject,
@@ -48,7 +49,7 @@ export class RenFuncs {
   };
 
   static getFuncFileData = (f: BFunc, m: BModule) => {
-    return {
+    let data = {
       title: `${this.getModuleFileTitle(m)}: ${f.key}`,
       path: `/src/modules/${m.path}/${BFuncHelpers.getFuncPath(f)}`,
       metadata: {
@@ -58,6 +59,8 @@ export class RenFuncs {
         extension: f.extension,
       },
     };
+    console.log('Data:', data);
+    return data;
   };
 
   static createModuleSuccess = (
@@ -74,7 +77,11 @@ export class RenFuncs {
     dispatch(setCurModule(newModule));
   };
 
-  static openProject = (project: Project, dispatch: any, openWithVs: any) => {
+  static openProjectOld = (
+    project: Project,
+    dispatch: any,
+    openWithVs: any
+  ) => {
     if (openWithVs) {
       window.electron.openProjectInVs({ projKey: project.key });
     }
@@ -85,20 +92,26 @@ export class RenFuncs {
     dispatch(setCurPage(AppPage.Project));
   };
 
-  static openFile = (
+  static openProject = (
     project: Project,
-    f: BFunc,
-    m: BModule,
     dispatch: any,
-    openWithVs: any
+    editorToUse: Editor
   ) => {
-    if (openWithVs) {
-      window.electron.openFile({
-        path: RenFuncs.getFuncFileData(f, m).path,
-        projKey: project!.key,
-      });
-    } else {
-      dispatch(setCurFile(RenFuncs.getFuncFileData(f, m)));
+    window.electron.setCurProject({
+      projKey: project.key,
+      projType: project.projectType,
+    });
+    if (editorToUse === Editor.VSCODE) {
+      window.electron.openProjectInVs({ projKey: project.key });
+    } else if (editorToUse === Editor.INTELLIJ) {
+      window.electron.openProjectInIntelliJ({ projKey: project.key });
     }
+    window.electron.setWindowSize(
+      editorToUse != Editor.VISUALBACKEND
+        ? projWindowSizeVs
+        : projWindowSizeNoVs
+    );
+    dispatch(setCurrentProject(project));
+    dispatch(setCurPage(AppPage.Project));
   };
 }

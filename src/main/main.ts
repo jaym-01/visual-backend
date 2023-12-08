@@ -28,6 +28,7 @@ import {
   FirebaseActions,
   ModuleActions,
   MongoActions,
+  ProjectActions,
   ResendActions,
 } from './actions';
 import { ChildProcess } from 'child_process';
@@ -42,9 +43,11 @@ import {
   getMongoDbs,
 } from './ipc/project/modules/mongodb/mongoFuncs';
 import {
+  checkBinInstalled,
   createProject,
   deleteProject,
   initProject,
+  setCurProject,
   updateYamlAndGitPush,
 } from './ipc/project/projectFuncs';
 import {
@@ -71,6 +74,7 @@ import {
 import {
   getFileContents,
   openFile,
+  openProjectInIntelliJ,
   openProjectInVs,
   saveFileContents,
 } from './ipc/project/editorFuncs';
@@ -101,12 +105,15 @@ import { initNodeBinaries, setNodeType } from './helpers/binFuncs';
 import {
   checkVsRequirementsMet,
   getDeviceType,
+  getEditorToUse,
   getNodeType,
   getOpenWithVs,
+  setEditorToUse,
   setOpenWithVs,
   setWindowSze,
 } from './ipc/home/homeFuncs';
-import { homeWindowSize } from '@/renderer/misc/constants';
+import { electronStoreKeys, homeWindowSize } from '@/renderer/misc/constants';
+import { Editor } from '@/shared/models/Editor';
 
 config();
 
@@ -227,13 +234,17 @@ const init = async () => {
 
   ipcMain.handle(Actions.GET_DEVICE_TYPE, getDeviceType);
   ipcMain.handle(Actions.GET_NODE_TYPE, getNodeType);
+  ipcMain.handle(Actions.CHECK_BIN_INSTALLED, checkBinInstalled);
   ipcMain.handle(Actions.GET_OPEN_WITH_VS, getOpenWithVs);
   ipcMain.handle(Actions.SET_OPEN_WITH_VS, (e: any, p: any) =>
     setOpenWithVs(e, p, mainWindow!)
   );
   ipcMain.handle(Actions.CHECK_VS_REQUIREMENTS_MET, checkVsRequirementsMet);
 
-  ipcMain.handle(Actions.SET_WINDOW_SIZE, setOpenWithVs);
+  ipcMain.handle(Actions.GET_EDITOR_TO_USE, getEditorToUse);
+  ipcMain.handle(Actions.SET_EDITOR_TO_USE, (e: any, p: any) => {
+    setEditorToUse(e, p, mainWindow!);
+  });
 
   ipcMain.handle(Actions.OPEN_CHECKOUT_PAGE, openCheckoutPage);
   ipcMain.handle(Actions.OPEN_CUSTOMER_PORTAL, openCustomerPortal);
@@ -291,6 +302,10 @@ const init = async () => {
   ipcMain.handle(Actions.DELETE_AUTH_TOKENS, deleteTokens);
 };
 
+const projectInit = async () => {
+  ipcMain.handle(ProjectActions.SET_CURRENT_PROJECT, setCurProject);
+};
+
 const mongoInit = async () => {
   ipcMain.handle(MongoActions.GET_MONGO_COLS, getMongoCols);
 };
@@ -330,6 +345,8 @@ const resendInit = async () => {
 const editorInit = async () => {
   ipcMain.on(EditorActions.OPEN_FILE, openFile);
   ipcMain.on(EditorActions.OPEN_PROJECT_IN_VS, openProjectInVs);
+
+  ipcMain.on(EditorActions.OPEN_PROJECT_IN_INTELLIJ, openProjectInIntelliJ);
 };
 
 let quitting = false;
@@ -396,8 +413,8 @@ app
   .then(async () => {
     // autoUpdater.checkForUpdates();
 
-    await initNodeBinaries();
-    await setNodeType();
+    // await initNodeBinaries();
+    // await setNodeType();
 
     createWindow();
     fixPath();
@@ -408,11 +425,13 @@ app
 
     await FileFuncs.createDirIfNotExists(BinFuncs.getBinOutputFolder());
 
-    // let s = new Store();
-    // s.delete(electronStoreKeys.openWithVsKey);
-    // console.log('Node type:', s.get(nodeTypeKey));
+    let s = new Store();
+    if (!s.get(electronStoreKeys.editorToUseKey)) {
+      s.set(electronStoreKeys.editorToUseKey, Editor.VISUALBACKEND);
+    }
 
     init();
+    projectInit();
     firebaseInit();
     moduleInit();
     mongoInit();

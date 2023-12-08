@@ -1,3 +1,5 @@
+import { ProjectType } from './project';
+
 export type Route = {
   id?: number;
   parentId: number;
@@ -20,6 +22,7 @@ export type RouteNode = {
 export enum RouteType {
   group = 'grp',
   middleware = 'mid',
+  dependency = 'dep',
   get = 'get',
   post = 'post',
   put = 'put',
@@ -66,10 +69,75 @@ export class RouteFuncs {
     });
   };
 
-  static getFuncNameFromStr = (key: string, type: string, id: number) => {
-    if (key === '') return '';
-    // let name = key.replace('-', ' ');
-    // name = key.replace('_', ' ');
+  static getParentKey = (parentPath: string) => {
+    let arr = parentPath.split('/');
+    arr = arr.filter((x) => x != '');
+    return arr[arr.length - 1];
+  };
+
+  static getPyFuncNameFromStr = (
+    parentPath: string,
+    key: string,
+    type: string,
+    id: number
+  ) => {
+    // handle key is empty
+    if (key === '') {
+      // Case 1: Root group, id is 1
+      if (id == 1) return 'root';
+      if (parentPath == '') {
+        return `root_${type.toLowerCase()}`;
+      }
+
+      // Case 2: Middleware
+
+      // Case 3: Endpoint
+      return `${RouteFuncs.getParentKey(parentPath)}_${type.toLowerCase()}`;
+    }
+
+    // handle key is not empty
+    let name = key;
+    if (name[0] == '{' && name[name.length - 1] == '}') {
+      name = name.replace('{', 'by_');
+      name = name.slice(0, name.length - 1);
+    }
+
+    if (type == RouteType.group) {
+      return name;
+      // return this.camelise(name);
+    } else if (type == RouteType.dependency) {
+      return `${name}_dependency`;
+    }
+    {
+      return `${type.toLowerCase()}_${name}`;
+    }
+  };
+
+  static getFuncNameFromStr = (
+    parentPath: string,
+    key: string,
+    type: string,
+    id: number,
+    projType?: ProjectType
+  ) => {
+    if (projType == ProjectType.FastAPI) {
+      return this.getPyFuncNameFromStr(parentPath, key, type, id);
+    }
+
+    // handle key is empty
+    if (key === '') {
+      // Case 1: Root group, id is 1
+      if (id == 1) return 'root';
+
+      // Case 2: Middleware
+      if (parentPath == '') {
+        return `root_${type.toLowerCase()}`;
+      } else {
+        return `${RouteFuncs.getParentKey(parentPath)}_${type.toLowerCase()}`;
+      }
+    }
+
+    // handle key is not empty
     let name = key;
     if (name[0] == ':') {
       name = name.replace(':', 'by_');
@@ -77,41 +145,72 @@ export class RouteFuncs {
 
     if (type == RouteType.group) {
       return name;
-      // return this.camelise(name);
     } else if (type == RouteType.middleware) {
       return `${name}_middleware`;
-      // return this.camelise(`${name} ${id} middleware`);
-    }
-    {
-      return `${type.toLowerCase()}_${name}`;
-      // return this.camelise(`${type.toLowerCase()} ${name} ${id}`);
-    }
-  };
-
-  static getFuncName = (route: Route) => {
-    return this.getFuncNameFromStr(route.key, route.type, route.id!);
-  };
-
-  static getImportStatement = (route: Route) => {
-    if (route.type === RouteType.group) {
-      let funcName = this.getFuncName(route);
-      return `import { ${funcName}Router } from './${funcName}/${funcName}Router.js';\n`;
     } else {
-      let funcName = this.getFuncName(route);
+      return `${type.toLowerCase()}_${name}`;
+    }
+  };
+
+  static getFuncName = (
+    route: Route,
+    projType: ProjectType = ProjectType.Express
+  ) => {
+    return this.getFuncNameFromStr(
+      route.parentPath,
+      route.key,
+      route.type,
+      route.id!,
+      projType
+    );
+  };
+
+  static getImportStatement = (
+    route: Route,
+    projectType: ProjectType = ProjectType.Express
+  ) => {
+    let funcName = this.getFuncName(route, projectType);
+    if (projectType == ProjectType.FastAPI) {
+      if (route.type === RouteType.group) {
+        return `from .${funcName}.${funcName}_router import ${funcName}_router;\n`;
+      } else {
+        return `from .${funcName} import ${funcName}\n`;
+      }
+    }
+
+    if (route.type === RouteType.group) {
+      return `import { ${funcName}_router } from './${funcName}/${funcName}_router.js';\n`;
+    } else {
       return `import { ${funcName} } from './${funcName}.js'\n`;
     }
   };
 
-  static getUseStatement = (route: Route, parentFuncName: string) => {
+  static getUseStatement = (
+    route: Route,
+    parentFuncName: string,
+    projType: ProjectType = ProjectType.Express
+  ) => {
+    let funcName = this.getFuncName(route, projType);
+
+    if (projType == ProjectType.FastAPI) {
+      if (route.type === RouteType.group) {
+        return `${parentFuncName}_router.include_router(${funcName}_router)\n`;
+      } else if (route.type === RouteType.dependency) {
+        return `Depends(${funcName}), `;
+      } else {
+        return `${parentFuncName}_router.add_api_route(methods=['${route.type.toUpperCase()}'], path="/${
+          route.key
+        }", endpoint=${funcName})\n`;
+      }
+    }
+
     if (route.type === RouteType.group) {
-      return `${parentFuncName}Router.use('/${route.key}', ${this.getFuncName(
-        route
-      )}Router)\n`;
+      return `${parentFuncName}_router.use('/${route.key}', ${funcName}_router)\n`;
     } else if (route.type === RouteType.middleware) {
-      return `${parentFuncName}Router.use(${this.getFuncName(route)})\n`;
+      return `${parentFuncName}_router.use(${funcName})\n`;
     } else
-      return `${parentFuncName}Router.${route.type.toLowerCase()}('/${
+      return `${parentFuncName}_router.${route.type.toLowerCase()}('/${
         route.key
-      }', ${this.getFuncName(route)})\n`;
+      }', ${funcName})\n`;
   };
 }

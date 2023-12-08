@@ -8,6 +8,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from 'renderer/redux/store';
 import { Route, RouteNode, RouteType } from '@/shared/models/route';
 import { addRoute } from '@/renderer/redux/routes/routesSlice';
+import { ProjectType } from '@/shared/models/project';
 
 type CreateRouteModalProps = {
   setCreateModalOpen: Dispatch<SetStateAction<boolean>>;
@@ -39,7 +40,19 @@ function CreateRouteModal({
     return sanitizedPath;
   }
 
-  function isValidString(key: string) {
+  function isValidString(key: string): { valid: boolean; error: string } {
+    if (
+      key.length === 0 &&
+      type != RouteType.group &&
+      type != RouteType.middleware &&
+      type != RouteType.dependency
+    ) {
+      return { valid: true, error: '' };
+    }
+
+    if (key.length == 0) {
+      return { valid: false, error: 'Path name cannot be empty for this type' };
+    }
     // Regular expression for valid JavaScript function names
     const validFunctionNameRegex = /^[:]?[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
@@ -47,18 +60,21 @@ function CreateRouteModal({
     const validPathComponentRegex = /^[a-zA-Z0-9\-._~!$&'()*+,;=:@/]*$/;
 
     // Check if the key is valid as both a JavaScript function name and a URL path component
-    return (
-      validFunctionNameRegex.test(key) && validPathComponentRegex.test(key)
-    );
+    return {
+      valid:
+        validFunctionNameRegex.test(key) && validPathComponentRegex.test(key),
+      error:
+        "Path name can only contain alphanumeric characters and '_' or a ':' at the start. It also cannot begin with numbers.",
+    };
   }
 
   const createClicked = async () => {
     setLoading(true);
     let path = sanitizePath(name);
-    if (!isValidString(path)) {
-      setErrorText(
-        "Path name can only contain alphanumeric characters and '_' or a ':' at the start. It also cannot begin with numbers."
-      );
+
+    let { valid, error } = isValidString(path);
+    if (!valid) {
+      setErrorText(error);
       return;
     }
 
@@ -128,7 +144,9 @@ function CreateRouteModal({
             onChange={(val) => setType(val)}
             options={[
               { value: 'grp', label: 'GROUP' },
-              { value: 'mid', label: 'MIDDLEWARE' },
+              project?.projectType == ProjectType.FastAPI
+                ? { value: 'dep', label: 'DEPENDENCY' }
+                : { value: 'mid', label: 'MIDDLEWARE' },
               { value: 'get', label: 'GET' },
               { value: 'put', label: 'PUT' },
               { value: 'post', label: 'POST' },
